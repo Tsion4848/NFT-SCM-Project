@@ -1,70 +1,65 @@
-<?php
-
 namespace App\Http\Controllers;
 
 use App\Image;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class ImageController extends Controller
 {
     public function uploadInfo(Request $request)
-{
-    // Validate the uploaded image
-    $request->validate([
-        'image' => 'required|file|mimes:jpg,jpeg,svg|max:2048', // Restrict image type and size
-    ], [
-        'image.mimes' => 'The image must be in JPEG or SVG format.',
-        'image.max' => 'The image size must not exceed 2MB.',
-    ]);
+    {
+        try {
+            // Validate the uploaded image
+            $request->validate([
+                'image' => 'required|file|mimes:jpg,jpeg,svg|max:2048', // Restrict image type and size
+            ], [
+                'image.mimes' => 'The image must be in JPEG or SVG format.',
+                'image.max' => 'The image size must not exceed 2MB.',
+            ]);
 
-    $imageName = time() . '.' . $request->image->extension();
-    $request->image->move(public_path('images'), $imageName);
+            $imageName = time() . '.' . $request->image->extension();
 
-    $image = new Image();
-    $image->name = $request->name;
-    $image->description = $request->description;
-    $image->photographer = $request->photographer;
-    $image->price = $request->price;
-    $image->duration = $request->duration;
-    $image->path = $imageName;
-    $image->save();
+            // Store the image using a dedicated file storage system (e.g., Amazon S3)
+            Storage::disk('public')->putFileAs('images', $request->file('image'), $imageName);
 
-    return back()->with('success', 'Image is uploaded successfully.');
-    
-}
+            $image = new Image();
+            $image->name = $request->name;
+            $image->description = $request->description;
+            $image->photographer = $request->photographer;
+            $image->price = $request->price;
+            $image->duration = $request->duration;
+            $image->path = $imageName;
+            $image->save();
+
+            return back()->with('success', 'Image uploaded successfully.');
+        } catch (\Exception $e) {
+            return back()->with('error', 'Image upload failed: ' . $e->getMessage());
+        }
+    }
 
     public function displayInfo()
     {
-        $images = Image::all();
+        $images = Image::paginate(10); // Display 10 images per page
+
         return view('explore', ['images' => $images]);
     }
 
     public function specificInfo($id)
     {
-        $image = Image::findOrFail($id);
+        try {
+            $image = Image::findOrFail($id);
 
-        $duration = $image->duration;
+            $duration = $image->duration;
 
-        $expiration_date = date('Y-m-d H:i:s', strtotime($duration));
-        $expiration_timestamp = strtotime($expiration_date);
+            $expiration_date = date('Y-m-d H:i:s', strtotime($duration));
+            $expiration_timestamp = strtotime($expiration_date);
 
-        return view('details', [
-            'image' => $image,
-            'expiration_timestamp' => $expiration_timestamp,
-        ]);
+            return view('details', [
+                'image' => $image,
+                'expiration_timestamp' => $expiration_timestamp,
+            ]);
+        } catch (\Exception $e) {
+            return back()->with('error', 'Image not found: ' . $e->getMessage());
+        }
     }
-
-//     public function duration($id) {
-    //         $image = Image::find($id);
-
-//         $created_on = $image->created_on;
-
-//         $expiration_date = date('Y-m-d H:i:s', strtotime($created_on.'+ 5 days'));
-    //         $expiration_timestamp = strtotime($expiration_date);
-
-//         return View('image.show', [
-    //             'image' => $image,
-    //             'expiration_timestamp' => $expiration_timestamp,
-    //         ]);
-    //     }
 }
